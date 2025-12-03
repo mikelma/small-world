@@ -30,8 +30,9 @@ class EnvParams(PyTreeNode):
 
 class State(PyTreeNode):
     grid: Grid
-    step: int = struct.field(pytree_node=False)
+    step: IntLike
     agents_pos: Integer[Array, "num_agents 2"]
+    agent_values: Float[Array, "num_agents"]
     carry: EnvCarry
 
 
@@ -159,7 +160,11 @@ class Environment(abc.ABC):
     ) -> Float[Array, "{params.height} {params.width}"]:
         positions = timestep.state.agents_pos
         grid = timestep.state.grid
-        grid = grid.at[positions[:, 0], positions[:, 1]].set(AGENT_CELL)
+
+        y_coords = positions[:, 0]
+        x_coords = positions[:, 1]
+
+        grid = grid.at[y_coords, x_coords].set(timestep.state.agent_values)
 
         # normalize grid from [-1, 1] to [0, 1] get the final image
         img = (grid + 1) / 2

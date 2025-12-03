@@ -10,28 +10,34 @@ class SimpleEnvCarry(EnvCarry): ...
 
 
 class Simple(Environment):
-    def default_params(self, **kwargs: dict[str, Any]) -> EnvParams:
+    def default_params(self, **kwargs: Any) -> EnvParams:
         params = EnvParams(
-            height=10, width=10, view_size=5, num_agents=1, num_actions=4
+            height=10,
+            width=10,
+            view_size=5,
+            num_agents=1,
+            num_actions=4,
         )
         params = params.replace(**kwargs)
         return params
 
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
         grid = jnp.zeros((params.height, params.width))
-        grid = grid.at[0:2, 4].set(-1)
-        grid = grid.at[4, 0:4].set(-1)
-        # grid = (
-        #     jnp.arange(params.height * params.width, dtype=float).reshape(
-        #         params.height, params.width
-        #     )
-        #     / 10
-        # )
+        # grid = grid.at[0:2, 4].set(-1)
+        # grid = grid.at[4, 0:4].set(-1)
+
+        key_x, key_y = jax.random.split(key)
+        pos_x = jax.random.randint(key_x, (params.num_agents, 1), 0, params.width)
+        pos_y = jax.random.randint(key_y, (params.num_agents, 1), 0, params.height)
+
+        initial_positions = jnp.hstack((pos_y, pos_x))
+        agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
 
         return State(
             grid=grid,
             step=0,
-            agents_pos=jnp.asarray((5, 5), dtype=int).reshape(1, -1),
+            agents_pos=initial_positions,
+            agent_values=agent_values,
             carry=SimpleEnvCarry(),
         )
 
