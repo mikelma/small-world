@@ -1,6 +1,7 @@
 import abc
 from typing import TypeAlias, Any
 from flax.struct import PyTreeNode
+from flax import struct
 
 import jax
 import jax.numpy as jnp
@@ -19,16 +20,15 @@ class EnvCarry(PyTreeNode): ...
 
 
 class EnvParams(PyTreeNode):
-    height: int
-    width: int
-    num_agents: int
-    num_actions: int
-    view_size: int
-
+    height: int = struct.field(pytree_node=False)
+    width: int = struct.field(pytree_node=False)
+    num_agents: int = struct.field(pytree_node=False)
+    num_actions: int = struct.field(pytree_node=False)
+    view_size: int = struct.field(pytree_node=False)
 
 class State(PyTreeNode):
     grid: Grid
-    step: IntLike
+    step: int = struct.field(pytree_node=False)
     agents_pos: Integer[Array, "num_agents 2"]
     carry: EnvCarry
 
@@ -52,7 +52,7 @@ class Environment(abc.ABC):
         self, params: EnvParams, state: State, key: PRNGKeyArray
     ) -> Float[Array, "{params.num_agents}"]: ...
 
-    def get_observation(
+    def _get_observation(
         self, params: EnvParams, grid: Grid, position: Integer[Array, "2"]
     ) -> Float[Array, "{params.view_size} {params.view_size}"]:
         vs = params.view_size
@@ -65,6 +65,8 @@ class Environment(abc.ABC):
 
         observation = jax.lax.dynamic_slice(grid, (x - vs // 2, y - vs // 2), (vs, vs))
 
+        print("***TODO!*** Include other agents in the observation")
+
         return observation
 
     def reset(self, params: EnvParams, key: PRNGKeyArray) -> Timestep:
@@ -72,7 +74,7 @@ class Environment(abc.ABC):
         state = self._generate_problem(params, key_gen)
 
         positions = state.agents_pos
-        observations = jax.vmap(self.get_observation, in_axes=(None, None, 0))(
+        observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
             params, state.grid, positions
         )
 
@@ -110,7 +112,17 @@ class Environment(abc.ABC):
             lambda: (new_x, new_y),
         )
 
-        return new_x, new_y
+        return jnp.asarray((new_x, new_y))
+
+    @abc.abstractmethod
+    def _update_state(
+        self,
+        params: EnvParams,
+        timestep: Timestep,
+        actions: Integer[Scalar, "{params.num_agents}"],
+        new_positions: Integer[Array, "{params.num_agents} 2"],
+    ) -> State:
+        ...
 
     def step(
         self,
@@ -125,4 +137,12 @@ class Environment(abc.ABC):
             grid, positions, actions
         )
 
-        quit()
+        new_state = self._update_state(params, timestep, actions, new_positions)
+
+        rewards = self._compute_rewards(params, new_state, key)
+
+        observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
+            params, new_state.grid, new_state.agents_pos
+        )
+        
+        return Timestep(observations, rewards, new_state)

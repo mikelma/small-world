@@ -38,15 +38,13 @@ class Simple(Environment):
     ) -> Float[Array, "{params.num_agents}"]:
         return jnp.zeros((params.num_agents))
 
-    def _update(
+    def _update_state(
         self,
         params: EnvParams,
         timestep: Timestep,
         actions: Integer[Scalar, "{params.num_agents}"],
-        positions: Integer[Array, "{params.num_agents} 2"],
         new_positions: Integer[Array, "{params.num_agents} 2"],
-    ) -> Timestep:
-        # 1) update state
+    ) -> State:
         # simple update: update with new positions and advance step by one, leave the grid unchanged
         prev_state = timestep.state
         new_state = prev_state.replace(
@@ -55,15 +53,4 @@ class Simple(Environment):
             agents_pos=new_positions,
         )
 
-        # update observations
-
-        # update reward
-        new_rewards = timestep.rewards  # constant reward
-
-        return Timestep(
-            timestep.observations,
-            new_rewards,
-            new_state,
-        )
-
-        pass
+        return new_state
