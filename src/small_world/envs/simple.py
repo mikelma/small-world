@@ -33,7 +33,9 @@ class Simple(Environment):
             carry=SimpleEnvCarry(),
         )
 
-    def _compute_rewards(self, params: EnvParams, state: State, key: PRNGKeyArray) -> Float[Array, "{params.num_agents}"]:
+    def _compute_rewards(
+        self, params: EnvParams, state: State, key: PRNGKeyArray
+    ) -> Float[Array, "{params.num_agents}"]:
         return jnp.zeros((params.num_agents))
 
     def _update(
