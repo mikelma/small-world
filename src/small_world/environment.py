@@ -26,6 +26,7 @@ class EnvParams(PyTreeNode):
     num_actions: int = struct.field(pytree_node=False)
     view_size: int = struct.field(pytree_node=False)
 
+
 class State(PyTreeNode):
     grid: Grid
     step: int = struct.field(pytree_node=False)
@@ -121,8 +122,7 @@ class Environment(abc.ABC):
         timestep: Timestep,
         actions: Integer[Scalar, "{params.num_agents}"],
         new_positions: Integer[Array, "{params.num_agents} 2"],
-    ) -> State:
-        ...
+    ) -> State: ...
 
     def step(
         self,
@@ -144,5 +144,19 @@ class Environment(abc.ABC):
         observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
             params, new_state.grid, new_state.agents_pos
         )
-        
+
         return Timestep(observations, rewards, new_state)
+
+    def render(
+        self, params: EnvParams, timestep: Timestep
+    ) -> Float[Array, "{params.height} {params.width}"]:
+        positions = timestep.state.agents_pos
+        grid = timestep.state.grid
+        print("Positions:", positions)
+        grid = grid.at[positions[:, 1], positions[:, 0]].set(AGENT_CELL)
+
+        # normalize grid to get the final image
+        img = grid - grid.min()
+        img /= img.max()
+
+        return img

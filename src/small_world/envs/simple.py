@@ -18,13 +18,13 @@ class Simple(Environment):
         return params
 
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
-        # grid = jnp.zeros((params.height, params.width))
-        grid = (
-            jnp.arange(params.height * params.width, dtype=float).reshape(
-                params.height, params.width
-            )
-            / 10
-        )
+        grid = jnp.zeros((params.height, params.width))
+        # grid = (
+        #     jnp.arange(params.height * params.width, dtype=float).reshape(
+        #         params.height, params.width
+        #     )
+        #     / 10
+        # )
 
         return State(
             grid=grid,
