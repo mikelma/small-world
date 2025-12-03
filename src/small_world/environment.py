@@ -3,6 +3,7 @@ from typing import TypeAlias, Any
 from flax.struct import PyTreeNode
 
 import jax 
+import jax.numpy as jnp
 from jaxtyping import Scalar, ScalarLike, Array, Integer, Float, PRNGKeyArray
 
 
@@ -11,6 +12,7 @@ AGENT_CELL = 1
 
 
 Grid: TypeAlias = Float[Array, "height width"]
+IntLike: TypeAlias = Integer[ScalarLike, ""]
 
 
 class EnvCarry(PyTreeNode): ...
@@ -21,11 +23,12 @@ class EnvParams(PyTreeNode):
     width: int
     num_agents: int
     num_actions: int
+    view_size: int
 
 
 class State(PyTreeNode):
     grid: Grid
-    step: int
+    step: IntLike
     agents_pos: Integer[Array, "num_agents 2"]
     carry: EnvCarry
     
@@ -47,9 +50,39 @@ class Environment(abc.ABC):
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
         ...
 
+    @abc.abstractmethod
+    def _compute_rewards(self, params: EnvParams, state: State, key: PRNGKeyArray) -> Float[Array, "{params.num_agents}"]:
+        ...
+
+    def get_observation(self, params: EnvParams, grid: Grid, position: Integer[Array, "2"]) -> Float[Array, "{params.view_size} {params.view_size}"]:
+        vs = params.view_size
+
+        # TODO we should fill the pad with EMPTY_CELL instead 
+        grid = jnp.pad(grid, pad_width=vs, mode="constant")
+
+        # account for padding
+        x, y = position[1] + vs, position[0] + vs
+
+        observation = jax.lax.dynamic_slice(grid, (x - vs // 2, y - vs // 2), (vs, vs))
+
+        return observation
+        
+
     def reset(self, params: EnvParams, key: PRNGKeyArray) -> Timestep:
-        state = self._generate_problem()
+        key_gen, key_rwd = jax.random.split(key)
+        state = self._generate_problem(params, key_gen)
 
-        
+        positions = state.agents_pos
+        observations = jax.vmap(self.get_observation, in_axes=(None, None, 0))(params, state.grid, positions)
 
-        
+        rewards = self._compute_rewards(params, state, key_rwd)
+
+        return Timestep(
+            observations,
+            rewards,
+            state,
+        )
+
+        quit()
+
+                

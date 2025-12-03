@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 from typing import Any
-from jaxtyping import Array, Scalar, Integer
+from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float
 
 from ..environment import Environment, EnvParams, State, EnvCarry, Timestep
 
@@ -10,7 +10,7 @@ class SimpleEnvCarry(EnvCarry): ...
 
 
 class Simple(Environment):
-    def default_params(self, **kwargs: dict[str, Any]):
+    def default_params(self, **kwargs: dict[str, Any]) -> EnvParams:
         params = EnvParams(
             height=10, width=10, view_size=5, num_agents=1, num_actions=4
         )
@@ -32,6 +32,9 @@ class Simple(Environment):
             agents_pos=jnp.asarray((5, 5), dtype=int).reshape(1, -1),
             carry=SimpleEnvCarry(),
         )
+
+    def _compute_rewards(self, params: EnvParams, state: State, key: PRNGKeyArray) -> Float[Array, "{params.num_agents}"]:
+        return jnp.zeros((params.num_agents))
 
     def _update(
         self,
