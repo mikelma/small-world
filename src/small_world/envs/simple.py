@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from typing import Any
 from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float
 
-from ..environment import Environment, EnvParams, State, EnvCarry, Timestep
+from ..environment import Environment, EnvParams, State, EnvCarry, Timestep, WALL_CELL
 
 
 class SimpleEnvCarry(EnvCarry): ...
@@ -19,6 +19,8 @@ class Simple(Environment):
 
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
         grid = jnp.zeros((params.height, params.width))
+        grid = grid.at[0:2, 4].set(-1)
+        grid = grid.at[4, 0:4].set(-1)
         # grid = (
         #     jnp.arange(params.height * params.width, dtype=float).reshape(
         #         params.height, params.width

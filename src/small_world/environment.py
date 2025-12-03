@@ -10,6 +10,7 @@ from jaxtyping import Scalar, ScalarLike, Array, Integer, Float, PRNGKeyArray
 
 EMPTY_CELL = 0
 AGENT_CELL = 1
+WALL_CELL = -1
 
 
 Grid: TypeAlias = Float[Array, "height width"]
@@ -106,14 +107,20 @@ class Environment(abc.ABC):
             action < 4, lambda: _make_move(x, y), lambda: (x, y)
         )
 
+        # check boundaries
+        new_x, new_y = (
+            jnp.clip(new_x, 0, grid.shape[1] - 1),
+            jnp.clip(new_y, 0, grid.shape[0] - 1),
+        )
+
         # check collisions
         new_x, new_y = jax.lax.cond(
-            grid[y, x] < 0,  # NOTE cell values < 0 are "solid material"
+            grid[new_y, new_x] < 0,  # NOTE cell values < 0 are "solid material"
             lambda: (x, y),
             lambda: (new_x, new_y),
         )
 
-        return jnp.asarray((new_x, new_y))
+        return jnp.asarray((new_y, new_x))
 
     @abc.abstractmethod
     def _update_state(
@@ -152,11 +159,9 @@ class Environment(abc.ABC):
     ) -> Float[Array, "{params.height} {params.width}"]:
         positions = timestep.state.agents_pos
         grid = timestep.state.grid
-        print("Positions:", positions)
-        grid = grid.at[positions[:, 1], positions[:, 0]].set(AGENT_CELL)
+        grid = grid.at[positions[:, 0], positions[:, 1]].set(AGENT_CELL)
 
-        # normalize grid to get the final image
-        img = grid - grid.min()
-        img /= img.max()
+        # normalize grid from [-1, 1] to [0, 1] get the final image
+        img = (grid + 1) / 2
 
         return img
