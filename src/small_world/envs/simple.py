@@ -5,6 +5,7 @@ from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float
 
 from ..environment import Environment, EnvParams, State, EnvCarry, Timestep
 from ..constants import EMPTY_CELL, WALL_CELL
+from ..utils import empty_cells_mask, sample_empty_coordinates
 
 
 class SimpleEnvCarry(EnvCarry): ...
@@ -27,11 +28,14 @@ class Simple(Environment):
         grid = grid.at[0:2, 4].set(WALL_CELL)
         grid = grid.at[4, 0:4].set(WALL_CELL)
 
-        key_x, key_y = jax.random.split(key)
-        pos_x = jax.random.randint(key_x, (params.num_agents, 1), 0, params.width)
-        pos_y = jax.random.randint(key_y, (params.num_agents, 1), 0, params.height)
+        mask = empty_cells_mask(grid)
 
-        initial_positions = jnp.hstack((pos_y, pos_x))
+        key_x, key_y = jax.random.split(key)
+        # pos_x = jax.random.randint(key_x, (params.num_agents, 1), 0, params.width)
+        # pos_y = jax.random.randint(key_y, (params.num_agents, 1), 0, params.height)
+        # initial_positions = jnp.hstack((pos_y, pos_x))
+        initial_positions = sample_empty_coordinates(key_x, grid, params.num_agents)
+
         agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
 
         return State(
