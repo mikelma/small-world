@@ -56,7 +56,8 @@ class FromMap(Environment):
             agents_init_pos=jnp.asarray(agents_init_pos),
         )
         del kwargs["file_name"]
-        del kwargs["num_agents"]
+        if "num_agents" in kwargs:
+            del kwargs["num_agents"]
         params = params.replace(**kwargs)
         return params
 
