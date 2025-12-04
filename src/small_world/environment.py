@@ -9,8 +9,8 @@ from jaxtyping import Scalar, ScalarLike, Array, Integer, Float, PRNGKeyArray
 
 
 EMPTY_CELL = 0
-AGENT_CELL = 1
-WALL_CELL = -1
+WALL_CELL = -0.9
+BORDER_CELL = -1
 
 
 Grid: TypeAlias = Float[Array, "height width"]
@@ -64,8 +64,8 @@ class Environment(abc.ABC):
         positions = state.agents_pos
         grid = state.grid.at[positions[:, 0], positions[:, 1]].set(state.agent_values)
 
-        # TODO we should fill the pad with EMPTY_CELL instead
-        grid = jnp.pad(grid, pad_width=vs, mode="constant")
+        # pad the grid with border cells
+        grid = jnp.pad(grid, pad_width=vs, mode="constant", constant_values=BORDER_CELL)
 
         # account for padding
         x, y = position[1] + vs, position[0] + vs
