@@ -56,9 +56,13 @@ class Environment(abc.ABC):
     ) -> Float[Array, "{params.num_agents}"]: ...
 
     def _get_observation(
-        self, params: EnvParams, grid: Grid, position: Integer[Array, "2"]
+        self, params: EnvParams, state: State, position: Integer[Array, "2"]
     ) -> Float[Array, "{params.view_size} {params.view_size}"]:
         vs = params.view_size
+
+        # add all agent values to the grid
+        positions = state.agents_pos
+        grid = state.grid.at[positions[:, 0], positions[:, 1]].set(state.agent_values)
 
         # TODO we should fill the pad with EMPTY_CELL instead
         grid = jnp.pad(grid, pad_width=vs, mode="constant")
@@ -66,9 +70,7 @@ class Environment(abc.ABC):
         # account for padding
         x, y = position[1] + vs, position[0] + vs
 
-        observation = jax.lax.dynamic_slice(grid, (x - vs // 2, y - vs // 2), (vs, vs))
-
-        print("***TODO!*** Include other agents in the observation")
+        observation = jax.lax.dynamic_slice(grid, (y - vs // 2, x - vs // 2), (vs, vs))
 
         return observation
 
@@ -78,7 +80,7 @@ class Environment(abc.ABC):
 
         positions = state.agents_pos
         observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
-            params, state.grid, positions
+            params, state, positions
         )
 
         rewards = self._compute_rewards(params, state, key_rwd)
@@ -150,7 +152,7 @@ class Environment(abc.ABC):
         rewards = self._compute_rewards(params, new_state, key)
 
         observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
-            params, new_state.grid, new_state.agents_pos
+            params, new_state, new_state.agents_pos
         )
 
         return Timestep(observations, rewards, new_state)
@@ -167,6 +169,6 @@ class Environment(abc.ABC):
         grid = grid.at[y_coords, x_coords].set(timestep.state.agent_values)
 
         # normalize grid from [-1, 1] to [0, 1] get the final image
-        img = (grid + 1) / 2
+        # img = (grid + 1) / 2
 
-        return img
+        return grid
