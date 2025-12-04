@@ -7,10 +7,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Scalar, ScalarLike, Array, Integer, Float, PRNGKeyArray
 
-
-EMPTY_CELL = 0
-WALL_CELL = -0.9
-BORDER_CELL = -1
+from .constants import BORDER_CELL
 
 
 Grid: TypeAlias = Float[Array, "height width"]
@@ -63,6 +60,13 @@ class Environment(abc.ABC):
         # add all agent values to the grid
         positions = state.agents_pos
         grid = state.grid.at[positions[:, 0], positions[:, 1]].set(state.agent_values)
+
+        # ensure that the value of the cell in the position of this agent is
+        # the cell value that corresponds to this agent (relevant when more than
+        # one agent are in the same cell).
+        mask = (positions == position).all(axis=1).astype(int)
+        agent_value = (state.agent_values * mask).sum()
+        grid = grid.at[position[0], position[1]].set(agent_value)
 
         # pad the grid with border cells
         grid = jnp.pad(grid, pad_width=vs, mode="constant", constant_values=BORDER_CELL)
@@ -141,6 +145,7 @@ class Environment(abc.ABC):
         timestep: Timestep,
         actions: Integer[Array, "{params.num_agents}"],
     ) -> Timestep:
+        # move all agents in parallel
         grid = timestep.state.grid
         positions = timestep.state.agents_pos
         new_positions = jax.vmap(self._move_agent, in_axes=(None, 0, 0))(
