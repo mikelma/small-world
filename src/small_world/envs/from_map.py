@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from typing import Any
 from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float
+from flax import struct
 
 from ..environment import (
     Environment,
@@ -9,6 +10,7 @@ from ..environment import (
     State,
     EnvCarry,
     Timestep,
+    Grid,
 )
 from ..constants import EMPTY_CELL, WALL_CELL
 from ..utils import empty_cells_mask, sample_empty_coordinates
@@ -17,37 +19,58 @@ from ..utils import empty_cells_mask, sample_empty_coordinates
 class SimpleEnvCarry(EnvCarry): ...
 
 
-class Simple(Environment):
+class FromMapParams(EnvParams):
+    map: Grid = struct.field(pytree_node=True)
+    agents_init_pos: Integer[Array, "num_agents 2"] = struct.field(pytree_node=True)
+
+
+class FromMap(Environment):
     def default_params(self, **kwargs: Any) -> EnvParams:
-        params = EnvParams(
+        with open(kwargs["file_name"], "r") as f:
+            str_lst = [line.strip() for line in f.readlines()]
+
+        grid = jnp.full((10, 10), EMPTY_CELL)
+
+        n_rows, n_cols = len(str_lst), len(str_lst[0])
+
+        ascii_cells = {".": EMPTY_CELL, "+": WALL_CELL}
+
+        agents_init_pos = []
+        for i in range(n_rows):
+            for j in range(n_cols):
+                char = str_lst[i][j]
+                # don't set a grid value for agents. Agent positions are handled below
+                value = EMPTY_CELL if char.isalpha() else ascii_cells[char]
+                grid = grid.at[i, j].set(value)
+                # log agent's initial position
+                if char.isalpha():
+                    agents_init_pos.append((i, j))
+
+        params = FromMapParams(
             height=10,
             width=10,
             view_size=5,
-            num_agents=1,
+            num_agents=len(agents_init_pos),
             num_actions=4,
+            map=grid,
+            agents_init_pos=jnp.asarray(agents_init_pos),
         )
+        del kwargs["file_name"]
+        del kwargs["num_agents"]
         params = params.replace(**kwargs)
         return params
 
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
-        grid = jnp.full((params.height, params.width), EMPTY_CELL)
-        grid = grid.at[0:2, 4].set(WALL_CELL)
-        grid = grid.at[4, 0:4].set(WALL_CELL)
+        grid = params.map
 
         mask = empty_cells_mask(grid)
-
-        key_x, key_y = jax.random.split(key)
-        # pos_x = jax.random.randint(key_x, (params.num_agents, 1), 0, params.width)
-        # pos_y = jax.random.randint(key_y, (params.num_agents, 1), 0, params.height)
-        # initial_positions = jnp.hstack((pos_y, pos_x))
-        initial_positions = sample_empty_coordinates(key_x, grid, params.num_agents)
 
         agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
 
         return State(
             grid=grid,
             step=0,
-            agents_pos=initial_positions,
+            agents_pos=params.agents_init_pos,
             agent_values=agent_values,
             carry=SimpleEnvCarry(),
         )
