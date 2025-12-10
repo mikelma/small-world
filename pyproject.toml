@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "beartype>=0.22.7",
+    "catppuccin>=2.5.0",
     "flax>=0.12.1",
     "jax>=0.8.1",
     "jaxtyping>=0.3.3",

@@ -7,7 +7,9 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Scalar, ScalarLike, Array, Integer, Float, PRNGKeyArray
 
-from .constants import BORDER_CELL
+import catppuccin as cat
+
+from .constants import BORDER_CELL, EMPTY_CELL, WALL_CELL
 
 
 Grid: TypeAlias = Float[Array, "height width"]
@@ -162,9 +164,55 @@ class Environment(abc.ABC):
 
         return Timestep(observations, rewards, new_state)
 
+    def _default_cell_color(self, cell: Scalar, state: State) -> Integer[Array, "3"]:
+        from .utils import rgb
+
+        palette = cat.PALETTE.latte.colors
+
+        # specific colors for the agents
+        agent_colors = jnp.asarray(
+            [
+                # colors for simple objects:
+                rgb(palette.overlay1),  # border
+                rgb(palette.subtext0),  # wall
+                rgb(palette.base),  # empty
+                # colors for agents:
+                # NOTE: there're colors up to 10 agents, after that,
+                # the rest of agents will have the last color in this list
+                rgb(palette.lavender),
+                rgb(palette.maroon),
+                rgb(palette.teal),
+                rgb(palette.yellow),
+                rgb(palette.sky),
+                rgb(palette.green),
+                rgb(palette.peach),
+                rgb(palette.sapphire),
+                rgb(palette.red),
+                rgb(palette.blue),
+            ]
+        )
+
+        simple_types = jnp.asarray((BORDER_CELL, WALL_CELL, EMPTY_CELL))
+        cell_types = jnp.hstack((simple_types, state.agent_values))
+
+        # calculate distance between the current cell and all known agent values
+        dists = jnp.abs(cell_types - cell)
+
+        # find the closest match
+        closest_idx = jnp.argmin(dists)
+        return agent_colors[closest_idx]
+
+    def grid_to_rgb(self, grid: Grid, state: State) -> Integer[Array, "height width 3"]:
+        flat_grid = grid.ravel()
+        colored = jax.vmap(self._default_cell_color, in_axes=(0, None))(
+            flat_grid, state
+        )
+        img = colored.reshape(*grid.shape, 3)
+        return img
+
     def render(
-        self, params: EnvParams, timestep: Timestep
-    ) -> Float[Array, "{params.height} {params.width}"]:
+        self, params: EnvParams, timestep: Timestep, scale_factor: int = 1
+    ) -> Integer[Array, "{params.height*scale_factor} {params.width*scale_factor} 3"]:
         positions = timestep.state.agents_pos
         grid = timestep.state.grid
 
@@ -173,7 +221,10 @@ class Environment(abc.ABC):
 
         grid = grid.at[y_coords, x_coords].set(timestep.state.agent_values)
 
-        # normalize grid from [-1, 1] to [0, 1] get the final image
-        # img = (grid + 1) / 2
+        img = self.grid_to_rgb(grid, timestep.state)
 
-        return grid
+        if scale_factor > 1:
+            img = jnp.repeat(img, scale_factor, axis=0)
+            img = jnp.repeat(img, scale_factor, axis=1)
+
+        return img

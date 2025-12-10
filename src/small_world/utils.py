@@ -3,6 +3,13 @@ from .constants import EMPTY_CELL
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Bool, Integer, PRNGKeyArray
+from catppuccin.models import Color
+
+
+def rgb(color: Color) -> Integer[Array, "3"]:
+    """Converts a catppuccin `Color` object into a jax array of it's RGB values."""
+    c = color.rgb
+    return jnp.asarray((c.r, c.g, c.b))
 
 
 def empty_cells_mask(grid: Grid) -> Bool[Array, "height width"]:
