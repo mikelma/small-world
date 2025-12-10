@@ -46,6 +46,12 @@ class FromMap(Environment):
                 if char.isalpha():
                     agents_init_pos.append((i, j))
 
+        # if no agent is detect in the map file, set their initial positions
+        # to (-1, -1) to later be randomly chosen in self._generate_problem
+        if len(agents_init_pos) == 0:
+            n = kwargs["num_agents"] if "num_agents" in kwargs else 1
+            agents_init_pos = [[-1, -1]] * n
+
         params = FromMapParams(
             height=10,
             width=10,
@@ -64,14 +70,19 @@ class FromMap(Environment):
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
         grid = params.map
 
-        mask = empty_cells_mask(grid)
-
         agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
+
+        # use random initial positions if needed (see `self.default_params`)
+        init_pos = jax.lax.cond(
+            (params.agents_init_pos == -1).any(),
+            lambda: sample_empty_coordinates(key, grid, params.num_agents),
+            lambda: params.agents_init_pos,
+        )
 
         return State(
             grid=grid,
             step=0,
-            agents_pos=params.agents_init_pos,
+            agents_pos=init_pos,
             agent_values=agent_values,
             carry=SimpleEnvCarry(),
         )
