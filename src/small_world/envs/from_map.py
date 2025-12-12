@@ -29,9 +29,8 @@ class FromMap(Environment):
         with open(kwargs["file_name"], "r") as f:
             str_lst = [line.strip() for line in f.readlines()]
 
-        grid = jnp.full((10, 10), EMPTY_CELL)
-
         n_rows, n_cols = len(str_lst), len(str_lst[0])
+        grid = jnp.full((n_rows, n_cols), EMPTY_CELL)
 
         ascii_cells = {".": EMPTY_CELL, "+": WALL_CELL}
 
@@ -53,8 +52,8 @@ class FromMap(Environment):
             agents_init_pos = [[-1, -1]] * n
 
         params = FromMapParams(
-            height=10,
-            width=10,
+            height=n_rows,
+            width=n_cols,
             view_size=5,
             num_agents=len(agents_init_pos),
             num_actions=4,
