@@ -29,8 +29,9 @@ class FromMap(Environment):
         with open(kwargs["file_name"], "r") as f:
             str_lst = [line.strip() for line in f.readlines()]
 
+        dtype = kwargs["dtype"] if "dtype" in kwargs else jnp.float32
         n_rows, n_cols = len(str_lst), len(str_lst[0])
-        grid = jnp.full((n_rows, n_cols), EMPTY_CELL)
+        grid = jnp.full((n_rows, n_cols), EMPTY_CELL, dtype=dtype)
 
         ascii_cells = {".": EMPTY_CELL, "+": WALL_CELL}
 
@@ -60,9 +61,11 @@ class FromMap(Environment):
             map=grid,
             agents_init_pos=jnp.asarray(agents_init_pos),
         )
-        del kwargs["file_name"]
-        if "num_agents" in kwargs:
-            del kwargs["num_agents"]
+
+        to_delete = ["file_name", "num_agents", "dtype"]
+        for key in to_delete:
+            if key in kwargs:
+                del kwargs[key]
         params = params.replace(**kwargs)
         return params
 
