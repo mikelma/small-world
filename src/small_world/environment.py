@@ -30,14 +30,14 @@ class EnvParams(PyTreeNode):
 class State(PyTreeNode):
     grid: Grid
     step: IntLike
-    agents_pos: Integer[Array, "num_agents 2"]
-    agent_values: Float[Array, "num_agents"]
+    agents_pos: Integer[Array, " num_agents 2"]
+    agent_values: Float[Array, " num_agents"]
     carry: EnvCarry
 
 
 class Timestep(PyTreeNode):
     observations: Float[Array, "num_agents height width"]
-    rewards: Float[Array, "num_agents"]
+    rewards: Float[Array, " num_agents"]
 
     state: State
 
@@ -52,7 +52,7 @@ class Environment(abc.ABC):
     @abc.abstractmethod
     def _compute_rewards(
         self, params: EnvParams, state: State, key: PRNGKeyArray
-    ) -> Float[Array, "{params.num_agents}"]: ...
+    ) -> Float[Array, " {params.num_agents}"]: ...
 
     def _get_observation(
         self, params: EnvParams, state: State, position: Integer[Array, "2"]
@@ -134,9 +134,10 @@ class Environment(abc.ABC):
     @abc.abstractmethod
     def _update_state(
         self,
+        key: PRNGKeyArray,
         params: EnvParams,
         timestep: Timestep,
-        actions: Integer[Scalar, "{params.num_agents}"],
+        actions: Integer[Scalar, " {params.num_agents}"],
         new_positions: Integer[Array, "{params.num_agents} 2"],
     ) -> State: ...
 
@@ -145,8 +146,10 @@ class Environment(abc.ABC):
         key: PRNGKeyArray,
         params: EnvParams,
         timestep: Timestep,
-        actions: Integer[Array, "{params.num_agents}"],
+        actions: Integer[Array, " {params.num_agents}"],
     ) -> Timestep:
+        key_step, key_rwd = jax.random.split(key)
+
         # move all agents in parallel
         grid = timestep.state.grid
         positions = timestep.state.agents_pos
@@ -154,9 +157,11 @@ class Environment(abc.ABC):
             grid, positions, actions
         )
 
-        new_state = self._update_state(params, timestep, actions, new_positions)
+        new_state = self._update_state(
+            key_step, params, timestep, actions, new_positions
+        )
 
-        rewards = self._compute_rewards(params, new_state, key)
+        rewards = self._compute_rewards(params, new_state, key_rwd)
 
         observations = jax.vmap(self._get_observation, in_axes=(None, None, 0))(
             params, new_state, new_state.agents_pos
@@ -164,13 +169,15 @@ class Environment(abc.ABC):
 
         return Timestep(observations, rewards, new_state)
 
-    def _default_cell_color(self, cell: Scalar, state: State) -> Integer[Array, "3"]:
+    # NOTE overwrite this function if changing simple default colors
+    def _cell_types_and_colors(
+        self, state: State
+    ) -> tuple[Float[Array, " cell_types"], Integer[Array, " num_colors 3"]]:
         from .utils import rgb
 
         palette = cat.PALETTE.latte.colors
 
-        # specific colors for the agents
-        agent_colors = jnp.asarray(
+        colors = jnp.asarray(
             [
                 # colors for simple objects:
                 rgb(palette.overlay1),  # border
@@ -194,13 +201,17 @@ class Environment(abc.ABC):
 
         simple_types = jnp.asarray((BORDER_CELL, WALL_CELL, EMPTY_CELL))
         cell_types = jnp.hstack((simple_types, state.agent_values))
+        return cell_types, colors
+
+    def _default_cell_color(self, cell: Scalar, state: State) -> Integer[Array, "3"]:
+        cell_types, colors = self._cell_types_and_colors(state)
 
         # calculate distance between the current cell and all known agent values
         dists = jnp.abs(cell_types - cell)
 
         # find the closest match
         closest_idx = jnp.argmin(dists)
-        return agent_colors[closest_idx]
+        return colors[closest_idx]
 
     def grid_to_rgb(self, grid: Grid, state: State) -> Integer[Array, "height width 3"]:
         flat_grid = grid.ravel()

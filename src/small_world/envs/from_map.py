@@ -13,7 +13,7 @@ from ..environment import (
     Grid,
 )
 from ..constants import EMPTY_CELL, WALL_CELL
-from ..utils import empty_cells_mask, sample_empty_coordinates
+from ..utils import sample_empty_coordinates
 
 
 class SimpleEnvCarry(EnvCarry): ...
@@ -70,15 +70,15 @@ class FromMap(Environment):
         return params
 
     def _generate_problem(self, params: EnvParams, key: jax.Array) -> State:
-        grid = params.map
+        grid = params.map  # type: ignore (unresolved-attribute)
 
         agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
 
         # use random initial positions if needed (see `self.default_params`)
         init_pos = jax.lax.cond(
-            (params.agents_init_pos == -1).any(),
+            (params.agents_init_pos == -1).any(),  # type: ignore (unresolved-attribute)
             lambda: sample_empty_coordinates(key, grid, params.num_agents),
-            lambda: params.agents_init_pos,
+            lambda: params.agents_init_pos,  # type: ignore (unresolved-attribute)
         )
 
         return State(
@@ -91,14 +91,15 @@ class FromMap(Environment):
 
     def _compute_rewards(
         self, params: EnvParams, state: State, key: PRNGKeyArray
-    ) -> Float[Array, "{params.num_agents}"]:
+    ) -> Float[Array, " {params.num_agents}"]:
         return jnp.zeros((params.num_agents))
 
     def _update_state(
         self,
+        key: PRNGKeyArray,
         params: EnvParams,
         timestep: Timestep,
-        actions: Integer[Scalar, "{params.num_agents}"],
+        actions: Integer[Scalar, " {params.num_agents}"],
         new_positions: Integer[Array, "{params.num_agents} 2"],
     ) -> State:
         # simple update: update with new positions and advance step by one, leave the grid unchanged

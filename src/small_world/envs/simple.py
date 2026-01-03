@@ -48,15 +48,16 @@ class Simple(Environment):
 
     def _compute_rewards(
         self, params: EnvParams, state: State, key: PRNGKeyArray
-    ) -> Float[Array, "{params.num_agents}"]:
+    ) -> Float[Array, " {params.num_agents}"]:
         return jnp.zeros((params.num_agents))
 
     def _update_state(
         self,
+        key: PRNGKeyArray,
         params: EnvParams,
         timestep: Timestep,
-        actions: Integer[Scalar, "{params.num_agents}"],
-        new_positions: Integer[Array, "{params.num_agents} 2"],
+        actions: Integer[Scalar, " {params.num_agents}"],
+        new_positions: Integer[Array, " {params.num_agents} 2"],
     ) -> State:
         # simple update: update with new positions and advance step by one, leave the grid unchanged
         prev_state = timestep.state
