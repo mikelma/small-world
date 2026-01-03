@@ -16,6 +16,10 @@ def empty_cells_mask(grid: Grid) -> Bool[Array, "height width"]:
     return grid == EMPTY_CELL
 
 
+def traversable_cells_mask(grid: Grid) -> Bool[Array, "height width"]:
+    return grid >= EMPTY_CELL
+
+
 def grid_coords(grid: Grid) -> Integer[Array, "height*width 2"]:
     coords = jnp.mgrid[: grid.shape[0], : grid.shape[1]]
     coords = coords.transpose(1, 2, 0).reshape(-1, 2)
