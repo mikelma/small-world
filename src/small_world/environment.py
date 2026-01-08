@@ -239,3 +239,24 @@ class Environment(abc.ABC):
             img = jnp.repeat(img, scale_factor, axis=1)
 
         return img
+
+    def num_cell_types(self, state: State) -> int:
+        """Returns the number of unique cell values that the grid can take"""
+        cell_types, _ = self._cell_types_and_colors(state)
+        return cell_types.shape[0]
+
+    def discretize_observation(
+        self,
+        state: State,
+        obs: Float[Array, "view_size view_size"],
+    ) -> Integer[Array, "view_size view_size"]:
+        """Converts a continuous observation to a discrete one where each cell value
+        is replaced to its index according to the `_cell_types_and_colors` function."""
+        cell_types, _ = self._cell_types_and_colors(state)
+
+        def _discretize_cell(cell):
+            # get the closest match's idx
+            return jnp.argmin(jnp.abs(cell_types - cell))
+
+        disc = jax.vmap(_discretize_cell)(obs.reshape(-1))
+        return disc.reshape(*obs.shape)
