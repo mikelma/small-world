@@ -113,7 +113,7 @@ class Environment(abc.ABC):
 
         # execute a movement action if the action is an integer between 0 and 3
         new_x, new_y = jax.lax.cond(
-            action < 4, lambda: _make_move(x, y), lambda: (x, y)
+            action < jnp.asarray(4), lambda: _make_move(x, y), lambda: (x, y)
         )
 
         # check boundaries
