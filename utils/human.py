@@ -35,7 +35,7 @@ with install_import_hook("src", "beartype.beartype"):
 class Args:
     """Interactive player for the Small World Adventure environment."""
 
-    file_name: str = "./islands.txt"
+    file_name: str = "./envs-txt/adventure_M.txt"
     agent_pos: Tuple[int, int] = (17, 22)
     window_size: int = 800  # Size of the window in pixels
     fps: int = 30
