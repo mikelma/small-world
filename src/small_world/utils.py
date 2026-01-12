@@ -42,3 +42,21 @@ def sample_empty_coordinates(
         p=probs,
     )
     return coords[sampled]
+
+
+def sample_coordinates(
+    key: PRNGKeyArray, grid: Grid, mask: Bool[Array, "height width"], num: int
+) -> Integer[Array, "{num} 2"]:
+    coords = grid_coords(grid)
+    mask = mask.flatten()
+
+    # set to zero the prob of sampling a coordinate index that contains a non-empty cell
+    probs = (jnp.ones_like(mask) * mask) / mask.sum()
+    sampled = jax.random.choice(
+        key=key,
+        shape=(num,),
+        a=jnp.arange(grid.shape[0] * grid.shape[1]),
+        replace=False,
+        p=probs,
+    )
+    return coords[sampled]
