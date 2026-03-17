@@ -1,8 +1,9 @@
 import jax
 import jax.numpy as jnp
 from typing import Any
-from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float
+from jaxtyping import Array, Scalar, Integer, PRNGKeyArray, Float, Bool
 import catppuccin as cat
+from flax.struct import PyTreeNode
 
 from ..environment import (
     Environment,
@@ -18,16 +19,27 @@ from ..constants import EMPTY_CELL, WALL_CELL, BORDER_CELL
 from ..utils import sample_coordinates, rgb, empty_cells_mask
 
 
-GOAL_CELL = float(-0.6)
+GOAL_CELL = float(1.)
+
+class EnvConditions(PyTreeNode):
+    prob_wall:  ScalarLike
+    prob_floor: ScalarLike
+    wind: ScalarLike
+    wind_dir: IntLike
 
 
 class SCWCarry(EnvCarry):
     key_procgen: PRNGKeyArray
-
+    tgt_pos: Integer[Array, "2"]
+    conditions: EnvConditions
+    goal_reset: Bool[ScalarLike, ""]
 
 class SCWParams(EnvParams):
-    probs_wall: Float[Array, " num_timesteps"]
-    probs_floor: Float[Array, " num_timesteps"]
+    init_conditions: EnvConditions
+    num_steps: IntLike
+
+    wind_freq: ScalarLike
+    wind_max: ScalarLike
 
 
 def place_random_walls(key: PRNGKeyArray, grid: Grid, prob: ScalarLike, agents_pos: Integer[Array, "num_agents 2"]) -> Grid:
@@ -56,10 +68,7 @@ def remove_random_walls(key: PRNGKeyArray, grid: Grid, prob: ScalarLike) -> Grid
 
 class SimpleContinualWorld(Environment):
     def default_params(self, **kwargs: Any) -> EnvParams:
-        # probs_wall = jnp.full((10,), 0.1)
-        # probs_floor = jnp.full((10,), 0.1)
-        probs_wall = jnp.asarray([0.1, 0.0001])
-        probs_floor = jnp.asarray([0.0005, 0.0005])
+        assert "num_steps" in kwargs, "Missing required argument `num_steps`"
 
         params = SCWParams(
             height=20,
@@ -67,8 +76,15 @@ class SimpleContinualWorld(Environment):
             view_size=7,
             num_agents=1,
             num_actions=4,
-            probs_wall=probs_wall,
-            probs_floor=probs_floor,
+            init_conditions=EnvConditions(
+                prob_wall=0.1,
+                prob_floor=0.005,
+                wind=0.5,
+                wind_dir=2,  # left action (wind from right)
+            ),
+            wind_freq=3,
+            wind_max=0.15,
+            num_steps=kwargs["num_steps"],
         )
         params = params.replace(**kwargs)
         return params
@@ -81,40 +97,48 @@ class SimpleContinualWorld(Environment):
 
         # all agents start on the top left corner
         init_pos = jnp.zeros((params.num_agents, 2), dtype=int)
-        # place some wall cells in agents' starting positions to make placing the
-        # goal and objects easier on the grid. This is later replaced with an empty
-        # cell at the end of this function.
-        grid = grid.at[init_pos[:, 0], init_pos[:, 1]].set(WALL_CELL)
 
         # randomly place wall cells
         key, _key = jax.random.split(key)
         grid = place_random_walls(key=_key, grid=grid,
-                                  prob=params.probs_wall[0], agents_pos=init_pos)
+                                  prob=params.init_conditions.prob_wall, agents_pos=init_pos)
 
         # place the goal in an empty cell
         key, _key = jax.random.split(key)
         mask = empty_cells_mask(grid)
         mask = mask.at[init_pos[:, 0], init_pos[:, 1]].set(False)
-        pos_goal = sample_coordinates(_key, grid, mask, 1)
-        grid = grid.at[pos_goal[:, 0], pos_goal[:, 1]].set(GOAL_CELL)
+        pos_goal = sample_coordinates(_key, grid, mask, 1)[0]
+        grid = grid.at[pos_goal[0], pos_goal[1]].set(GOAL_CELL)
 
-        # make sure that the agents' starting position is clear
-        grid = grid.at[init_pos[:, 0], init_pos[:, 1]].set(EMPTY_CELL)
-
-        agent_values = jnp.linspace(0.1, 1, num=params.num_agents)
+        agent_values = jnp.linspace(0.1, 0.5, num=params.num_agents)
 
         return State(
             grid=grid,
             step=0,
             agents_pos=init_pos,
             agent_values=agent_values,
-            carry=SCWCarry(key_procgen=key_procgen),
+            carry=SCWCarry(
+                key_procgen=key_procgen,
+                conditions=params.init_conditions,
+                tgt_pos=pos_goal,
+                goal_reset=False,
+            ),
         )
 
     def _compute_rewards(
         self, params: EnvParams, state: State, key: PRNGKeyArray
     ) -> Float[Array, " {params.num_agents}"]:
-        return jnp.zeros((params.num_agents))
+        return (state.agents_pos == state.carry.tgt_pos).all(1).astype(float)
+
+    def _update_conditions(self, conds: EnvConditions, tstep: IntLike, params: EnvParams) -> EnvConditions:
+        prob_wall = 0.01 / (params.height * params.width)
+        prob_floor = 0.02 / (params.height * params.width)
+        wind = jnp.sin((params.wind_freq * tstep / params.num_steps) * 2 * jnp.pi)
+        return conds.replace(
+            prob_wall=prob_wall,
+            prob_floor=prob_floor,
+            wind=wind,
+        )
 
     def _update_state(
         self,
@@ -126,23 +150,51 @@ class SimpleContinualWorld(Environment):
     ) -> State:
         prev_state = timestep.state
         prev_carry = prev_state.carry
+        prev_conds = prev_state.carry.conditions
 
         n_step = timestep.state.step + 1
 
         # NOTE all keys used for procgen in this function must use keys derived from the one in the carry
-        key_procgen, key_empty, key_walls = jax.random.split(prev_carry.key_procgen, num=3)
+        key_procgen, key_empty, key_walls, key_wind, key_goal = jax.random.split(prev_carry.key_procgen, num=5)
 
-        # add new wall cells
-        grid = remove_random_walls(key=key_empty, grid=prev_state.grid, prob=params.probs_floor[n_step])
+        # add new wall cells and remove some
+        grid = remove_random_walls(key=key_empty, grid=prev_state.grid, prob=prev_conds.prob_floor)
         grid = place_random_walls(key=key_walls, grid=grid,
-                                  prob=params.probs_wall[n_step], agents_pos=new_positions)
+                                  prob=prev_conds.prob_wall, agents_pos=new_positions)
+
+        # update agents' positions depending on the wind
+        pos_moved = jax.vmap(self._move_agent, in_axes=(None, 0, None))(grid, new_positions, prev_conds.wind_dir)
+        mask_moves = jax.random.bernoulli(key_wind, prev_conds.wind, (params.num_agents,))
+        new_positions = (~mask_moves) * new_positions + mask_moves * pos_moved
+
+        # generate a candidate position for the new goal
+        mask = empty_cells_mask(grid)
+        mask = mask.at[new_positions[:, 0], new_positions[:, 1]].set(False)
+        new_goal = sample_coordinates(key_goal, grid, mask, 1)[0]
+        # update goal's position if reached in this new state
+        tgt_pos = jax.lax.cond(prev_carry.goal_reset, lambda: new_goal, lambda: prev_carry.tgt_pos)
+        # update the grid with the new goal
+        grid = grid.at[tgt_pos[0], tgt_pos[1]].set(GOAL_CELL)
+        prev_goal_cell = jax.lax.cond(prev_carry.goal_reset, lambda: EMPTY_CELL, lambda: GOAL_CELL)
+        grid = grid.at[prev_carry.tgt_pos[0], prev_carry.tgt_pos[1]].set(prev_goal_cell)
+
+        # update environment's conditions
+        conditions = self._update_conditions(prev_carry.conditions, n_step, params)
+
+        # check if any agent has reached the objective, request goal reset in the next step in that case
+        goal_reset = (new_positions == prev_carry.tgt_pos).all(1).any()
 
         # simple update: update with new positions and advance step by one, leave the grid unchanged
         new_state = prev_state.replace(
             grid=grid,
             step=n_step,
             agents_pos=new_positions,
-            carry=SCWCarry(key_procgen=key_procgen)
+            carry=prev_carry.replace(
+                key_procgen=key_procgen,
+                conditions=conditions,
+                tgt_pos=tgt_pos,
+                goal_reset=goal_reset,
+            ),
         )
 
         return new_state
