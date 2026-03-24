@@ -40,6 +40,8 @@ class SCWParams(EnvParams):
     init_conditions: EnvConditions
     num_steps: IntLike
 
+    prob_wall: ScalarLike
+    prob_floor: ScalarLike
     wind_freq: ScalarLike
     wind_max: ScalarLike
 
