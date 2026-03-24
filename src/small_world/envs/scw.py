@@ -73,9 +73,10 @@ class SimpleContinualWorld(Environment):
     def default_params(self, **kwargs: Any) -> EnvParams:
         assert "num_steps" in kwargs, "Missing required argument `num_steps`"
 
+        height, width = 32, 32
         params = SCWParams(
-            height=20,
-            width=20,
+            height=height,
+            width=width,
             view_size=7,
             num_agents=1,
             num_actions=4,
@@ -87,6 +88,8 @@ class SimpleContinualWorld(Environment):
             ),
             wind_freq=3,
             wind_max=0.15,
+            prob_wall=0.01 / (height * width),
+            prob_floor=0.02 / (height * width),
             num_steps=kwargs["num_steps"],
         )
         params = params.replace(**kwargs)
@@ -140,12 +143,13 @@ class SimpleContinualWorld(Environment):
     def _update_conditions(
         self, conds: EnvConditions, tstep: IntLike, params: EnvParams
     ) -> EnvConditions:
-        prob_wall = 0.01 / (params.height * params.width)
-        prob_floor = 0.02 / (params.height * params.width)
-        wind = jnp.sin((params.wind_freq * tstep / params.num_steps) * 2 * jnp.pi)
+        wind = params.wind_max * -jnp.cos((params.wind_freq * tstep / params.num_steps) * 2 * jnp.pi)
+        wind = (wind + params.wind_max)  / 2  # scale to [0, wind_max]
+        wind *= tstep / params.num_steps
+        # wind = jnp.maximum(wind, jnp.asarray(0.0))
         return conds.replace(
-            prob_wall=prob_wall,
-            prob_floor=prob_floor,
+            prob_wall=params.prob_wall,
+            prob_floor=params.prob_floor,
             wind=wind,
         )
 
